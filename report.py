@@ -80,11 +80,10 @@ def build_pdf(res: dict, profile: dict, exec_log: dict | None = None) -> bytes:
     pdf.multi_cell(0, 8, _t(res["title"]), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.set_font("Helvetica", "", 8.5)
     pdf.set_text_color(*GREY)
-    meta = [("Prepared for", f"{profile.get('name') or '-'} ({profile.get('role', '-')})"),
-            ("Site / facility", profile.get("site") or "-"),
+    who = " - ".join(x for x in (profile.get("name"), profile.get("role")) if x)
+    meta = [(k, v) for k, v in [("Prepared for", who), ("Site / facility", profile.get("site", "")),
             ("Generated", datetime.now().strftime("%d %b %Y, %H:%M")),
-            ("Analysis mode", res["mode"]),
-            ("Document", f"{res['pages']} pages, {len(res['steps'])} steps, ID {res['doc_hash']}")]
+            ("Document", f"{res['pages']} page(s), {len(res['steps'])} steps, ID {res['doc_hash']}")] if v]
     for k, v in meta:
         pdf.cell(32, 5, _t(k))
         pdf.cell(0, 5, _t(v), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
@@ -169,7 +168,10 @@ def build_pdf(res: dict, profile: dict, exec_log: dict | None = None) -> bytes:
     pdf.para("Tick each step only after the expected result is confirmed. Full-attention steps are hold points.", 8.5, "I")
     pdf.ln(1)
     exec_log = exec_log or {}
-    for s in res["steps"]:
+    if res.get("go_decision") == "No-go":
+        pdf.para("Checklist withheld: this MOP is rated No-go. Fix the critical and high findings, "
+                 "then review the revised MOP to generate the execution checklist.", 9.5, "B")
+    for s in ([] if res.get("go_decision") == "No-go" else res["steps"]):
         if pdf.get_y() > 268:
             pdf.add_page()
         log = exec_log.get(s["num"])

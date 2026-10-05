@@ -1,11 +1,12 @@
 """
-MOP Safety Reviewer - AI Procedure Risk Reviewer for data center maintenance.
+MOP Safety Reviewer - AI-assisted Method of Procedure safety review for data center maintenance.
 Created by Umar Shahzad.
 """
 from __future__ import annotations
 
 import hashlib
 from datetime import datetime
+from html import escape
 from pathlib import Path
 
 import streamlit as st
@@ -13,192 +14,188 @@ from openai import OpenAI
 
 from mop_engine import PROVIDERS, analyze
 from report import APP_NAME, CREATOR, build_pdf
+from theme import css, score_ring
 
 MAX_MB, MAX_PAGES = 10, 40
 SAMPLE = Path(__file__).parent / "samples" / "sample_mop_ups_bypass.pdf"
-SEV_ICON = {"Critical": "🔴", "High": "🟠", "Medium": "🟡", "Low": "🟢"}
+DECISION_CLASS = {"Go": "go", "Go with fixes": "fixes", "No-go": "nogo"}
 
-st.set_page_config(page_title=f"{APP_NAME} | by {CREATOR}", page_icon="🛡️", layout="wide")
-st.markdown("""
-<style>
-.block-container{padding-top:1.6rem;max-width:1200px}
-.hero{background:linear-gradient(120deg,#0f2038 0%,#123c5a 60%,#009688 100%);color:#fff;
-      padding:26px 30px;border-radius:16px;margin-bottom:18px}
-.hero h1{margin:0;font-size:2.1rem;color:#fff}
-.hero p{margin:.35rem 0 0;opacity:.88}
-.badge{display:inline-block;background:rgba(255,255,255,.16);padding:3px 10px;border-radius:99px;
-       font-size:.78rem;margin-top:10px}
-.card{border:1px solid rgba(128,128,128,.25);border-radius:12px;padding:14px 16px;margin-bottom:10px}
-.sev{font-weight:700;font-size:.75rem;padding:2px 8px;border-radius:99px;color:#fff}
-.Critical{background:#c01c28}.High{background:#e65100}.Medium{background:#c79100}.Low{background:#2e7d32}
-.hot{border-left:5px solid #c01c28}
-.foot{text-align:center;opacity:.6;font-size:.8rem;margin-top:30px}
-</style>""", unsafe_allow_html=True)
+st.set_page_config(page_title=f"{APP_NAME} · by {CREATOR}", page_icon="🛡️",
+                   layout="centered", initial_sidebar_state="collapsed")
+st.markdown(css(), unsafe_allow_html=True)
 
-st.markdown(f"""<div class="hero"><h1>🛡️ {APP_NAME}</h1>
-<p>AI procedure risk reviewer for data center maintenance. Catch the mistake on paper,
-before it happens on the floor.</p>
-<span class="badge">Created by {CREATOR}</span> <span class="badge">RAG · FAISS · Agentic review</span>
-<span class="badge">Advisory only: humans decide</span></div>""", unsafe_allow_html=True)
 
-# ------------------------------------------------------------------ sidebar
-with st.sidebar:
-    st.header("👤 Personalise")
-    name = st.text_input("Your name", placeholder="e.g. Alex Rossi")
-    role = st.selectbox("Your role", ["Critical facilities engineer", "Data center technician",
-                                      "Shift lead / supervisor", "Student / learner", "Contractor"])
-    site = st.text_input("Site / facility (optional)", placeholder="e.g. MXP-1, Hall B")
-    context = st.text_area("Equipment & redundancy context (optional)", height=110,
-                           placeholder="e.g. UPS-A and UPS-B in 2N, each feeding PDU-A1/B1. Generator GEN-1 is N+1.")
-    st.divider()
-    st.header("🤖 AI engine")
-    provider = st.selectbox("Provider", list(PROVIDERS))
-    base_url, default_model = PROVIDERS[provider]
+# ------------------------------------------------------------- AI engine (hidden)
+def _engine():
+    """Key comes only from app secrets. Users never see provider, model or key."""
     try:
-        secret_key = st.secrets.get("GROQ_API_KEY" if provider.startswith("Groq") else "XAI_API_KEY", "")
+        if st.secrets.get("GROQ_API_KEY"):
+            url, model = PROVIDERS["Groq (free)"]
+            return st.secrets["GROQ_API_KEY"], url, st.secrets.get("GROQ_MODEL", model)
+        if st.secrets.get("XAI_API_KEY"):
+            url, model = PROVIDERS["xAI Grok"]
+            return st.secrets["XAI_API_KEY"], url, st.secrets.get("XAI_MODEL", model)
     except Exception:
-        secret_key = ""
-    api_key = secret_key or st.text_input("API key", type="password",
-                                          help="Free key at console.groq.com. Not stored.")
-    model = st.text_input("Model", default_model)
-    st.caption("✅ Key loaded from app secrets" if secret_key else
-               "No key? The app still runs in rules-only mode.")
-    st.divider()
-    st.caption(f"Built by **{CREATOR}** · Energy engineering, data center operations")
+        pass
+    return "", "", ""
 
-profile = {"name": name.strip(), "role": role, "site": site.strip(), "context": context.strip()}
+
+API_KEY, BASE_URL, MODEL = _engine()
 
 
 @st.cache_data(show_spinner=False, max_entries=32)
-def run_analysis(pdf_bytes: bytes, profile_items: tuple, key_hash: str, base_url: str, model: str, _key: str):
-    """Cached: same document + same context -> identical result (consistency)."""
+def run_analysis(pdf_bytes: bytes, profile_items: tuple, base_url: str, model: str, _key: str):
+    """Cached: same document + same details -> identical result."""
     client = OpenAI(api_key=_key, base_url=base_url, timeout=60) if _key else None
     return analyze(pdf_bytes, dict(profile_items), client, model, MAX_PAGES)
 
 
-# ------------------------------------------------------------------ input
-c1, c2 = st.columns([3, 1])
-with c1:
-    up = st.file_uploader(f"Upload a MOP (PDF, text-based, max {MAX_MB} MB / {MAX_PAGES} pages)", type=["pdf"])
-with c2:
-    st.write("")
-    st.write("")
-    use_sample = st.button("Try sample MOP", use_container_width=True, disabled=not SAMPLE.exists())
+# ------------------------------------------------------------------ header
+st.markdown(f"""<div class="nav"><div class="brand"><div class="logo">🛡</div>{APP_NAME}</div>
+<div class="by">Created by <b>{CREATOR}</b></div></div>
+<div class="hero"><div class="eyebrow">Data center maintenance safety</div>
+<h1>Catch the mistake on paper,<br><span class="grad">before it happens on the floor.</span></h1>
+<p class="lead">Upload a Method of Procedure (MOP). In seconds you get a readiness score, the steps that need
+full attention, every safety gap, and a report you can share.</p>
+<div class="stat">⚡ <span>Failure to follow procedures is the <b>#1 driver</b> of human-error outages (Uptime Institute, 2026)</span></div>
+</div>""", unsafe_allow_html=True)
 
-if use_sample:
-    st.session_state["pdf"] = ("sample_mop_ups_bypass.pdf", SAMPLE.read_bytes())
+# ------------------------------------------------------------------ input
+up = st.file_uploader(f"Upload your MOP (text-based PDF, up to {MAX_MB} MB / {MAX_PAGES} pages)", type=["pdf"])
+c1, c2 = st.columns([1, 2])
+with c1:
+    if st.button("Try a sample MOP", use_container_width=True, disabled=not SAMPLE.exists()):
+        st.session_state["pdf"] = ("sample_mop_ups_bypass.pdf", SAMPLE.read_bytes())
+with c2:
+    st.markdown("<div class='meta' style='padding-top:.55rem'>Files are processed in memory and never stored. "
+                "Please use non-confidential documents.</div>", unsafe_allow_html=True)
+
+with st.expander("Add details to your report (optional)"):
+    a, b = st.columns(2)
+    name = a.text_input("Your name")
+    role = b.selectbox("Your role", ["Not specified", "Critical facilities engineer", "Data center technician",
+                                     "Shift lead / supervisor", "Contractor", "Student / learner"])
+    site = a.text_input("Site or facility")
+    context = b.text_area("Equipment and redundancy notes", height=96,
+                          help="For example, which UPS units feed which PDUs and how redundant they are.")
+profile = {"name": name.strip(), "role": "" if role == "Not specified" else role,
+           "site": site.strip(), "context": context.strip()}
+
 if up is not None:
     if up.size > MAX_MB * 1024 * 1024:
-        st.error(f"File is {up.size / 1e6:.1f} MB; the limit is {MAX_MB} MB.")
+        st.error(f"This file is {up.size / 1e6:.1f} MB. The limit is {MAX_MB} MB.")
         st.stop()
     st.session_state["pdf"] = (up.name, up.getvalue())
 
 if "pdf" not in st.session_state:
-    a, b, c = st.columns(3)
-    a.markdown("<div class='card'><b>1 · Upload</b><br>Any MOP / SOP / EOP as a PDF.</div>", unsafe_allow_html=True)
-    b.markdown("<div class='card'><b>2 · Review</b><br>Rules + FAISS retrieval + AI reviewer flag gaps and high-risk steps.</div>", unsafe_allow_html=True)
-    c.markdown("<div class='card'><b>3 · Execute & export</b><br>Guided checklist with timestamps, and a branded PDF report.</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='foot'>{APP_NAME} · created by {CREATOR}</div>", unsafe_allow_html=True)
+    st.write("")
+    cols = st.columns(3)
+    for col, (n, t, d) in zip(cols, [
+        ("01", "Upload", "Any MOP, SOP or EOP as a PDF."),
+        ("02", "Review", "Safety rules and an AI reviewer flag gaps and high-risk steps."),
+        ("03", "Act", "Fix what's flagged, then execute with a guided checklist and export a report.")]):
+        col.markdown(f"<div class='card'><div class='n'>{n}</div><h3>{t}</h3><div class='meta'>{d}</div></div>",
+                     unsafe_allow_html=True)
+    st.markdown(f"<div class='foot'>{APP_NAME} · Created by {CREATOR}</div>", unsafe_allow_html=True)
     st.stop()
 
+# ------------------------------------------------------------------ analysis
 fname, pdf_bytes = st.session_state["pdf"]
 doc_id = hashlib.sha256(pdf_bytes).hexdigest()[:12]
 if st.session_state.get("doc_id") != doc_id:
     st.session_state["doc_id"], st.session_state["log"] = doc_id, {}
 
-with st.status(f"Reviewing **{fname}**…", expanded=False) as status:
+with st.spinner(f"Reviewing {fname}…"):
     try:
-        st.write("Parser agent: extracting steps · Rule agent: safety checks · Retriever: FAISS index · Reviewer: AI")
-        res = run_analysis(pdf_bytes, tuple(sorted(profile.items())),
-                           hashlib.sha256(api_key.encode()).hexdigest()[:8] if api_key else "",
-                           base_url, model, api_key)
-        status.update(label=f"Review complete · {res['mode']}", state="complete")
+        res = run_analysis(pdf_bytes, tuple(sorted(profile.items())), BASE_URL, MODEL, API_KEY)
     except ValueError as e:
-        status.update(label="Could not read this PDF", state="error")
         st.error(str(e))
         st.stop()
 
-if res["mode"].startswith("Rules only (AI unavailable"):
-    st.warning(res["mode"] + " Check your API key / model name.")
-
-# ------------------------------------------------------------------ overview
 hot = [s for s in res["steps"] if s["risk"] == "Full attention"]
-greet = f"{profile['name']}, here" if profile["name"] else "Here"
-st.subheader(f"{greet} is your review of “{res['title']}”")
-m1, m2, m3, m4 = st.columns(4)
-m1.metric("Readiness score", f"{res['score']}/100", res["grade"], delta_color="off")
-m2.metric("Decision", res.get("go_decision", "-"))
-m3.metric("Full-attention steps", len(hot))
-m4.metric("Findings", len(res["findings"]),
-          f"{sum(f['severity'] in ('Critical', 'High') for f in res['findings'])} critical/high", delta_color="inverse")
+decision = res.get("go_decision", "No-go")
+crit_high = sum(f["severity"] in ("Critical", "High") for f in res["findings"])
+greet = f"{escape(profile['name'])}, here's" if profile["name"] else "Here's"
 
-t1, t2, t3, t4, t5 = st.tabs(["📋 Summary", "🔴 Full attention", "🔎 Findings", "✅ Guided checklist", "📄 Report"])
+st.markdown(f"""<div class="card"><div class="meta">{greet} the review of</div>
+<h3 style="font-size:1.45rem;margin:.2rem 0 1rem">{escape(res['title'])}</h3>
+<div class="scorebox">{score_ring(res['score'])}
+<div style="flex:1;min-width:260px"><span class="chip {DECISION_CLASS.get(decision, 'nogo')}">{decision}</span>
+&nbsp;<span class="meta">{res['grade']}</span>
+<div class="kpis" style="margin-top:14px">
+<div class="kpi"><div class="v">{len(hot)}</div><div class="l">Full-attention steps</div></div>
+<div class="kpi"><div class="v">{len(res['findings'])}</div><div class="l">Findings</div></div>
+<div class="kpi"><div class="v">{crit_high}</div><div class="l">Critical / high</div></div>
+</div></div></div></div>""", unsafe_allow_html=True)
+
+t1, t2, t3, t4, t5 = st.tabs(["Summary", "Full attention", "Findings", "Guided checklist", "Report"])
 
 with t1:
-    st.markdown(f"<div class='card'>{res.get('summary', '')}</div>", unsafe_allow_html=True)
-    st.markdown("**Pre-job briefing**")
-    for line in str(res.get("briefing", "")).split("\n"):
-        if line.strip():
-            st.markdown(f"- {line.strip().lstrip('-* ')}")
-    st.caption(f"{res['pages']} pages · {len(res['steps'])} steps parsed · document ID {res['doc_hash']} · {res['mode']}")
+    st.markdown(f"<div class='card'><h3>Executive summary</h3>{escape(res.get('summary', ''))}</div>",
+                unsafe_allow_html=True)
+    lines = "".join(f"<li>{escape(l.strip().lstrip('-* '))}</li>"
+                    for l in str(res.get("briefing", "")).split("\n") if l.strip())
+    st.markdown(f"<div class='card'><h3>Pre-job briefing</h3><ul>{lines}</ul></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='meta'>{res['pages']} page(s) · {len(res['steps'])} steps · document ID {res['doc_hash']}</div>",
+                unsafe_allow_html=True)
 
 with t2:
     if not hot:
         st.success("No high-risk steps detected.")
     for s in hot:
         a = res["attention"].get(s["num"], {})
-        st.markdown(f"""<div class='card hot'><b>Step {s['num']}</b> — {s['text'][:400]}<br>
-<small>⚠️ <b>Risk:</b> {a.get('why') or '; '.join(s['reasons'])}</small>
-{f"<br><small>👁️ <b>Watch for:</b> {a['watch_for']}</small>" if a.get('watch_for') else ''}</div>""",
+        watch = f"<br><span class='meta'>👁 <b>Watch for:</b> {escape(a['watch_for'])}</span>" if a.get("watch_for") else ""
+        st.markdown(f"""<div class='card hot'><b>Step {escape(s['num'])}</b> · {escape(s['text'][:400])}<br>
+<span class='meta'>⚠ <b>Risk:</b> {escape(a.get('why') or '; '.join(s['reasons']))}</span>{watch}</div>""",
                     unsafe_allow_html=True)
 
 with t3:
-    sev_filter = st.multiselect("Severity", list(SEV_ICON), default=list(SEV_ICON))
     for f in res["findings"]:
-        if f["severity"] not in sev_filter:
-            continue
+        steps = f"<br><span class='meta'>Steps: {escape(', '.join(f['steps']))}</span>" if f["steps"] else ""
         st.markdown(f"""<div class='card'><span class='sev {f['severity']}'>{f['severity']}</span>
-&nbsp;<b>{f['title']}</b> <small>· {f['category']} · {f['source']}</small><br>{f['detail']}<br>
-<b style='color:#009688'>Fix:</b> {f['recommendation']}
-{f"<br><small>Steps: {', '.join(f['steps'])}</small>" if f['steps'] else ''}</div>""", unsafe_allow_html=True)
+&nbsp;<b>{escape(f['title'])}</b> <span class='meta'>· {escape(f['category'])}</span><br>{escape(f['detail'])}<br>
+<span class='fix'>Fix:</span> {escape(f['recommendation'])}{steps}</div>""", unsafe_allow_html=True)
 
 with t4:
-    st.caption("Steps unlock in order. Full-attention steps need an extra hold-point confirmation.")
-    initials = st.text_input("Your initials (recorded with each step)",
-                             value="".join(w[0] for w in profile["name"].split()).upper()[:4] or "", max_chars=6)
-    log = st.session_state["log"]
-    done = len(log)
-    st.progress(done / max(len(res["steps"]), 1), text=f"{done} of {len(res['steps'])} steps complete")
-    for i, s in enumerate(res["steps"]):
-        is_hot = s["risk"] == "Full attention"
-        unlocked = i == 0 or res["steps"][i - 1]["num"] in log
-        label = f"{'🔴 ' if is_hot else ''}{s['num']}. {s['text'][:180]}"
-        if s["num"] in log:
-            st.checkbox(label, value=True, disabled=True, key=f"c{i}")
-            st.caption(f"✔ {log[s['num']]['time']} · {log[s['num']]['by']}")
-            continue
-        if not unlocked:
-            st.checkbox(label, value=False, disabled=True, key=f"c{i}")
-            continue
-        hold_ok = True
-        if is_hot:
-            hold_ok = st.checkbox("Hold point: I confirmed the expected result and the area is safe",
-                                  key=f"h{i}")
-        if st.checkbox(label, key=f"c{i}", disabled=not (hold_ok and initials)):
-            log[s["num"]] = {"time": datetime.now().strftime("%H:%M:%S"), "by": initials or "-"}
+    if decision == "No-go":
+        st.markdown("""<div class='card hot'><h3>🔒 Checklist locked</h3>This MOP is <b>not safe to execute as written</b>.
+Fix the critical and high findings, upload the revised MOP, and the guided checklist unlocks automatically.</div>""",
+                    unsafe_allow_html=True)
+    else:
+        if decision == "Go with fixes":
+            st.warning("Approved with fixes: apply the findings before or during execution.")
+        st.caption("Steps unlock in order. Full-attention steps need a hold-point confirmation.")
+        initials = st.text_input("Your initials (recorded with each step)",
+                                 value="".join(w[0] for w in profile["name"].split()).upper()[:4], max_chars=6)
+        log = st.session_state["log"]
+        st.progress(len(log) / max(len(res["steps"]), 1), text=f"{len(log)} of {len(res['steps'])} steps complete")
+        for i, s in enumerate(res["steps"]):
+            is_hot = s["risk"] == "Full attention"
+            label = f"{'🔴 ' if is_hot else ''}{s['num']}. {s['text'][:180]}"
+            if s["num"] in log:
+                st.checkbox(label, value=True, disabled=True, key=f"c{i}")
+                st.caption(f"✔ {log[s['num']]['time']} · {log[s['num']]['by']}")
+                continue
+            if i > 0 and res["steps"][i - 1]["num"] not in log:
+                st.checkbox(label, value=False, disabled=True, key=f"c{i}")
+                continue
+            hold_ok = st.checkbox("Hold point: expected result confirmed and area is safe", key=f"h{i}") if is_hot else True
+            if not initials:
+                st.info("Enter your initials to start.")
+            if st.checkbox(label, key=f"c{i}", disabled=not (hold_ok and initials)):
+                log[s["num"]] = {"time": datetime.now().strftime("%H:%M:%S"), "by": initials}
+                st.rerun()
+        if log and st.button("Reset checklist"):
+            st.session_state["log"] = {}
             st.rerun()
-        if not initials:
-            st.info("Enter your initials to start.")
-    if log and st.button("Reset checklist"):
-        st.session_state["log"] = {}
-        st.rerun()
 
 with t5:
-    st.write("Download a branded PDF with the score, summary, full-attention steps, findings, "
-             "the execution checklist (with your timestamps) and a sign-off block.")
-    pdf_out = build_pdf(res, profile, st.session_state["log"])
-    st.download_button("⬇️ Download PDF report", pdf_out, type="primary", use_container_width=True,
-                       file_name=f"MOP_Safety_Reviewer_Report_{res['doc_hash']}.pdf", mime="application/pdf")
+    st.markdown("<div class='card'><h3>Download the report</h3>Score, summary, full-attention steps, findings"
+                + (", the execution checklist" if decision != "No-go" else "")
+                + " and a sign-off block, in one branded PDF.</div>", unsafe_allow_html=True)
+    st.download_button("Download PDF report", build_pdf(res, profile, st.session_state["log"]),
+                       use_container_width=True, mime="application/pdf",
+                       file_name=f"MOP_Safety_Reviewer_Report_{res['doc_hash']}.pdf")
 
-st.markdown(f"<div class='foot'>{APP_NAME} · created by <b>{CREATOR}</b> · "
+st.markdown(f"<div class='foot'>{APP_NAME} · Created by <b>{CREATOR}</b><br>"
             "Decision support only. A qualified engineer must approve every MOP.</div>", unsafe_allow_html=True)
