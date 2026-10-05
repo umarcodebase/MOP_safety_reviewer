@@ -162,6 +162,19 @@ p, li {{ font-size:1.05rem; line-height:1.65; }}
 [data-testid="stAlert"] {{ background:rgba(10,20,34,.85) !important; }}
 [data-testid="stAlert"] * {{ color:#fff !important; }}
 [data-testid="stProgress"] p {{ color:#e6edf5 !important; }}
+
+/* ---- upload box: broad selectors so it works on every Streamlit version / theme ---- */
+.stApp label, .stApp label p, .stApp label span {{ color:#ffffff !important; opacity:1 !important; }}
+[data-testid="stFileUploader"] label p {{ font-size:1rem !important; font-weight:600 !important; }}
+[data-testid="stFileUploader"] section, [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {{
+  background:rgba(10,20,34,.9) !important; border:1.5px dashed rgba(45,212,191,.6) !important; }}
+[data-testid="stFileUploader"] *:not(svg):not(path) {{ color:#e6edf5 !important; opacity:1 !important; }}
+[data-testid="stFileUploader"] small, [data-testid="stFileUploader"] span {{ color:#cbd5e1 !important; }}
+[data-testid="stFileUploader"] svg {{ fill:#2dd4bf !important; color:#2dd4bf !important; }}
+[data-testid="stFileUploader"] button, [data-testid="stFileUploader"] button * {{
+  background:#2dd4bf !important; color:#04131a !important; border:0 !important; font-weight:700 !important; opacity:1 !important; }}
+[data-testid="stFileUploader"] button svg {{ fill:#04131a !important; color:#04131a !important; }}
+[data-testid="stFileUploader"] button:hover {{ background:#5eead4 !important; }}
 @media (max-width:700px) {{ .kpis {{ grid-template-columns:1fr 1fr; }} .nav .by {{ display:none; }} }}
 </style>"""
 
