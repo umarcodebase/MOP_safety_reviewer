@@ -117,7 +117,7 @@ p, li {{ font-size:1.05rem; line-height:1.65; }}
 .kpis {{ display:grid; grid-template-columns:repeat(3,minmax(120px,1fr)); gap:12px; flex:1; }}
 .kpi {{ background:rgba(255,255,255,.03); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }}
 .kpi .v {{ font-family:var(--display); font-size:1.7rem; font-weight:700; color:#fff; }}
-.kpi .l {{ color:var(--muted); font-size:.82rem; text-transform:uppercase; letter-spacing:.08em; }}
+.kpi .l {{ color:#b6c2d1; font-size:.82rem; text-transform:uppercase; letter-spacing:.08em; }}
 .chip {{ display:inline-block; padding:6px 14px; border-radius:999px; font-weight:700; font-size:.9rem; }}
 .go {{ background:rgba(34,197,94,.15); color:#4ade80; border:1px solid rgba(34,197,94,.4); }}
 .fixes {{ background:rgba(249,115,22,.15); color:#fb923c; border:1px solid rgba(249,115,22,.4); }}
@@ -133,6 +133,35 @@ p, li {{ font-size:1.05rem; line-height:1.65; }}
 [data-testid="stExpander"] {{ background:var(--glass); border:1px solid var(--line); border-radius:14px; }}
 .foot {{ text-align:center; color:var(--muted); font-size:.85rem; margin-top:50px; padding-top:18px;
          border-top:1px solid var(--line); }}
+
+/* ---- force readable colours even if the Streamlit theme file is missing (light mode) ---- */
+.stApp, .stApp p, .stApp li, .stApp span, .stApp label, .stApp div, .stApp small,
+[data-testid="stWidgetLabel"] p, [data-testid="stMarkdownContainer"] p,
+[data-testid="stCaptionContainer"], [data-testid="stCheckbox"] label p {{ color:var(--ink); }}
+.meta, .meta *, .by, .kpi .l, [data-testid="stCaptionContainer"] p {{ color:#b6c2d1 !important; }}
+.eyebrow, .card .n, .fix {{ color:var(--accent) !important; }}
+.hero h1 {{ color:#fff !important; }}
+.grad {{ background:linear-gradient(90deg,var(--accent),var(--accent2)) !important; -webkit-background-clip:text !important;
+         background-clip:text !important; color:transparent !important; -webkit-text-fill-color:transparent !important; }}
+[data-testid="stWidgetLabel"] p {{ font-size:1rem !important; font-weight:600 !important; color:#fff !important; }}
+[data-testid="stFileUploaderDropzone"], [data-testid="stFileUploader"] section {{ background:rgba(10,20,34,.85) !important; }}
+[data-testid="stFileUploaderDropzone"] *, [data-testid="stFileUploaderFile"] * {{ color:#e6edf5 !important; }}
+[data-testid="stFileUploaderDropzone"] button, .stButton button {{ background:#0e1a2b !important; color:#fff !important;
+        border:1px solid rgba(45,212,191,.55) !important; }}
+[data-testid="stFileUploaderDropzone"] button:hover, .stButton button:hover {{ background:#12263a !important; border-color:var(--accent) !important; }}
+.stDownloadButton button, .stDownloadButton button * {{ color:#04131a !important; }}
+.stTabs [data-baseweb="tab"] p, .stTabs [data-baseweb="tab"] {{ color:#cbd5e1 !important; font-weight:600; }}
+.stTabs [aria-selected="true"], .stTabs [aria-selected="true"] p {{ color:var(--accent) !important; }}
+.stTabs [data-baseweb="tab-highlight"], .stTabs .react-aria-SelectionIndicator {{ background:var(--accent) !important; }}
+[data-testid="stExpander"] summary, [data-testid="stExpander"] summary * {{ color:#fff !important; }}
+[data-testid="stExpander"] details {{ background:transparent !important; }}
+.stTextInput input, .stTextArea textarea, [data-baseweb="select"] > div {{ background:#0e1a2b !important; color:#fff !important;
+        border:1px solid rgba(148,163,184,.35) !important; }}
+[data-baseweb="select"] *, [data-baseweb="popover"] li {{ color:#fff !important; }}
+[data-baseweb="popover"] ul {{ background:#0e1a2b !important; }}
+[data-testid="stAlert"] {{ background:rgba(10,20,34,.85) !important; }}
+[data-testid="stAlert"] * {{ color:#fff !important; }}
+[data-testid="stProgress"] p {{ color:#e6edf5 !important; }}
 @media (max-width:700px) {{ .kpis {{ grid-template-columns:1fr 1fr; }} .nav .by {{ display:none; }} }}
 </style>"""
 
